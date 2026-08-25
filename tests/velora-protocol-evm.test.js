@@ -110,9 +110,9 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           hash: 'dummy-swap-hash',
@@ -138,9 +138,9 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           hash: 'dummy-swap-hash',
@@ -212,7 +212,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           fee: 12_345n,
@@ -237,7 +237,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           fee: 12_345n,
@@ -299,9 +299,9 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           hash: 'dummy-user-operation-hash',
@@ -327,9 +327,9 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           hash: 'dummy-user-operation-hash',
@@ -406,7 +406,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           fee: 12_345n,
@@ -431,7 +431,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           fee: 12_345n,

@@ -16,7 +16,7 @@
 
 import { SwapProtocol } from '@tetherto/wdk-wallet/protocols'
 import { WalletAccountEvm } from '@tetherto/wdk-wallet-evm'
-import { WalletAccountEvmErc4337, WalletAccountReadOnlyEvmErc4337 } from '@tetherto/wdk-wallet-evm-erc-4337'
+import { WalletAccountEvmErc4337 } from '@tetherto/wdk-wallet-evm-erc-4337'
 
 import { JsonRpcProvider, BrowserProvider } from 'ethers'
 
@@ -27,6 +27,7 @@ import { constructSimpleSDK } from '@velora-dex/sdk'
 /** @typedef {import('@tetherto/wdk-wallet/protocols').SwapResult} SwapResult */
 
 /** @typedef {import('@tetherto/wdk-wallet-evm').WalletAccountReadOnlyEvm} WalletAccountReadOnlyEvm */
+/** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').WalletAccountReadOnlyEvmErc4337} WalletAccountReadOnlyEvmErc4337 */
 
 /** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletPaymasterTokenConfig} EvmErc4337WalletPaymasterTokenConfig */
 /** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletSponsorshipPolicyConfig} EvmErc4337WalletSponsorshipPolicyConfig */
@@ -71,7 +72,8 @@ export default class VeloraProtocolEvm extends SwapProtocol {
    *
    * @param {SwapOptions} options - The swap's options.
    * @param {Partial<EvmErc4337WalletPaymasterTokenConfig | EvmErc4337WalletSponsorshipPolicyConfig | EvmErc4337WalletNativeCoinsConfig> & Pick<SwapProtocolConfig, 'swapMaxFee'>} [config] - If
-   *   the protocol has been initialized with an erc-4337 wallet account, it can be used to override its configuration options along with the 'swapMaxFee' option.
+   *   the protocol has been initialized with an erc-4337 wallet account, it can be used to override its configuration options along with the 'swapMaxFee' option. Standard (non erc-4337)
+   *   accounts silently ignore the paymaster/sponsorship config (the 'swapMaxFee' override still applies).
    * @returns {Promise<SwapResult>} The swap's result.
    */
   async swap (options, config) {
@@ -85,27 +87,15 @@ export default class VeloraProtocolEvm extends SwapProtocol {
 
     const { swapTx, tokenInAmount, tokenOutAmount } = await this._getSwapTransactions(options)
 
-    if (this._account instanceof WalletAccountEvmErc4337) {
-      const { swapMaxFee } = { ...this._config, ...config }
+    const { swapMaxFee } = { ...this._config, ...config }
 
-      const { fee } = await this._account.quoteSendTransaction([swapTx], config)
+    const { fee } = await this._account.quoteSendTransaction(swapTx, config)
 
-      if (swapMaxFee !== undefined && fee >= swapMaxFee) {
-        throw new Error('Exceeded maximum fee cost for swap operation.')
-      }
-
-      const { hash } = await this._account.sendTransaction([swapTx], config)
-
-      return { hash, fee, tokenInAmount, tokenOutAmount }
-    }
-
-    const { fee } = await this._account.quoteSendTransaction(swapTx)
-
-    if (this._config.swapMaxFee !== undefined && fee >= this._config.swapMaxFee) {
+    if (swapMaxFee !== undefined && fee >= swapMaxFee) {
       throw new Error('Exceeded maximum fee cost for swap operation.')
     }
 
-    const { hash } = await this._account.sendTransaction(swapTx)
+    const { hash } = await this._account.sendTransaction(swapTx, config)
 
     return { hash, fee, tokenInAmount, tokenOutAmount }
   }
@@ -117,7 +107,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
    *
    * @param {SwapOptions} options - The swap's options.
    * @param {Partial<EvmErc4337WalletPaymasterTokenConfig | EvmErc4337WalletSponsorshipPolicyConfig | EvmErc4337WalletNativeCoinsConfig>} [config] - If the protocol has been initialized with
-   *   an erc-4337 wallet account, it can be used to override its configuration options.
+   *   an erc-4337 wallet account, it can be used to override its configuration options. Standard (non erc-4337) accounts silently ignore this config.
    * @returns {Promise<Omit<SwapResult, 'hash'>>} The swap's quotes.
    */
   async quoteSwap (options, config) {
@@ -127,13 +117,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
 
     const { swapTx, tokenInAmount, tokenOutAmount } = await this._getSwapTransactions(options)
 
-    if (this._account instanceof WalletAccountReadOnlyEvmErc4337) {
-      const { fee } = await this._account.quoteSendTransaction([swapTx], config)
-
-      return { fee, tokenInAmount, tokenOutAmount }
-    }
-
-    const { fee } = await this._account.quoteSendTransaction(swapTx)
+    const { fee } = await this._account.quoteSendTransaction(swapTx, config)
 
     return { fee, tokenInAmount, tokenOutAmount }
   }

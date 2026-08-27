@@ -15,7 +15,6 @@
 'use strict'
 
 import { SwapProtocol } from '@tetherto/wdk-wallet/protocols'
-import { WalletAccountEvmErc4337, WalletAccountReadOnlyEvmErc4337 } from '@tetherto/wdk-wallet-evm-erc-4337'
 
 import { JsonRpcProvider, BrowserProvider } from 'ethers'
 

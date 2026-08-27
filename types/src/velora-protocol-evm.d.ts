@@ -26,7 +26,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
      *
      * @param {SwapOptions} options - The swap's options.
      * @param {Partial<EvmErc4337WalletPaymasterTokenConfig | EvmErc4337WalletSponsorshipPolicyConfig | EvmErc4337WalletNativeCoinsConfig> & Pick<SwapProtocolConfig, 'swapMaxFee'>} [config] - If
-     *   the protocol has been initialized with an erc-4337 wallet account, it can be used to override its configuration options along with the 'swapMaxFee' option.
+     *   the protocol has been initialized with an erc-4337 wallet account, it can be used to override its configuration options along with the 'swapMaxFee' option. Standard (non erc-4337) accounts silently ignore the paymaster/sponsorship config (the 'swapMaxFee' override still applies).
      * @returns {Promise<SwapResult>} The swap's result.
      */
     swap(options: SwapOptions, config?: Partial<EvmErc4337WalletPaymasterTokenConfig | EvmErc4337WalletSponsorshipPolicyConfig | EvmErc4337WalletNativeCoinsConfig> & Pick<SwapProtocolConfig, "swapMaxFee">): Promise<SwapResult>;
@@ -37,7 +37,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
      *
      * @param {SwapOptions} options - The swap's options.
      * @param {Partial<EvmErc4337WalletPaymasterTokenConfig | EvmErc4337WalletSponsorshipPolicyConfig | EvmErc4337WalletNativeCoinsConfig>} [config] - If the protocol has been initialized with
-     *   an erc-4337 wallet account, it can be used to override its configuration options.
+     *   an erc-4337 wallet account, it can be used to override its configuration options. Standard (non erc-4337) accounts silently ignore this config.
      * @returns {Promise<Omit<SwapResult, 'hash'>>} The swap's quotes.
      */
     quoteSwap(options: SwapOptions, config?: Partial<EvmErc4337WalletPaymasterTokenConfig | EvmErc4337WalletSponsorshipPolicyConfig | EvmErc4337WalletNativeCoinsConfig>): Promise<Omit<SwapResult, "hash">>;

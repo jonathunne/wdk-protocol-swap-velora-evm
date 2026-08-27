@@ -15,8 +15,7 @@
 'use strict'
 
 import { SwapProtocol } from '@tetherto/wdk-wallet/protocols'
-import { WalletAccountEvm } from '@tetherto/wdk-wallet-evm'
-import { WalletAccountEvmErc4337 } from '@tetherto/wdk-wallet-evm-erc-4337'
+import { WalletAccountEvmErc4337, WalletAccountReadOnlyEvmErc4337 } from '@tetherto/wdk-wallet-evm-erc-4337'
 
 import { JsonRpcProvider, BrowserProvider } from 'ethers'
 
@@ -26,8 +25,8 @@ import { constructSimpleSDK } from '@velora-dex/sdk'
 /** @typedef {import('@tetherto/wdk-wallet/protocols').SwapOptions} SwapOptions */
 /** @typedef {import('@tetherto/wdk-wallet/protocols').SwapResult} SwapResult */
 
-/** @typedef {import('@tetherto/wdk-wallet-evm').WalletAccountReadOnlyEvm} WalletAccountReadOnlyEvm */
-/** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').WalletAccountReadOnlyEvmErc4337} WalletAccountReadOnlyEvmErc4337 */
+/** @typedef {import('@tetherto/wdk-wallet').IWalletAccount} IWalletAccount */
+/** @typedef {import('@tetherto/wdk-wallet').IWalletAccountReadOnly} IWalletAccountReadOnly */
 
 /** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletPaymasterTokenConfig} EvmErc4337WalletPaymasterTokenConfig */
 /** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletSponsorshipPolicyConfig} EvmErc4337WalletSponsorshipPolicyConfig */
@@ -38,7 +37,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
    * Creates a new read-only interface to the Velora protocol for evm blockchains.
    *
    * @overload
-   * @param {WalletAccountReadOnlyEvm | WalletAccountReadOnlyEvmErc4337} account - The wallet account to use to interact with the protocol.
+   * @param {IWalletAccountReadOnly} account - The wallet account to use to interact with the protocol.
    * @param {SwapProtocolConfig} [config] - The swap protocol configuration.
    */
 
@@ -46,7 +45,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
    * Creates a new interface to the Velora protocol for evm blockchains.
    *
    * @overload
-   * @param {WalletAccountEvm | WalletAccountEvmErc4337} account - The wallet account to use to interact with the protocol.
+   * @param {IWalletAccount} account - The wallet account to use to interact with the protocol.
    * @param {SwapProtocolConfig} [config] - The swap protocol configuration.
    */
   constructor (account, config) {
@@ -68,7 +67,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
   /**
    * Swaps a pair of tokens.
    *
-   * Users must first approve the necessary amount of input tokens to the Velora protocol using the {@link WalletAccountEvm#approve} or the {@link WalletAccountEvmErc4337#approve} method.
+   * Users must first approve the necessary amount of input tokens to the Velora protocol using the account's `approve` method.
    *
    * @param {SwapOptions} options - The swap's options.
    * @param {Partial<EvmErc4337WalletPaymasterTokenConfig | EvmErc4337WalletSponsorshipPolicyConfig | EvmErc4337WalletNativeCoinsConfig> & Pick<SwapProtocolConfig, 'swapMaxFee'>} [config] - If
@@ -77,7 +76,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
    * @returns {Promise<SwapResult>} The swap's result.
    */
   async swap (options, config) {
-    if (!(this._account instanceof WalletAccountEvm) && !(this._account instanceof WalletAccountEvmErc4337)) {
+    if (typeof this._account.sendTransaction !== 'function') {
       throw new Error("The 'swap(options)' method requires the protocol to be initialized with a non read-only account.")
     }
 
@@ -103,7 +102,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
   /**
    * Quotes the costs of a swap operation.
    *
-   * Users must first approve the necessary amount of input tokens to the Velora protocol using the {@link WalletAccountEvm#approve} or the {@link WalletAccountEvmErc4337#approve} method.
+   * Users must first approve the necessary amount of input tokens to the Velora protocol using the account's `approve` method.
    *
    * @param {SwapOptions} options - The swap's options.
    * @param {Partial<EvmErc4337WalletPaymasterTokenConfig | EvmErc4337WalletSponsorshipPolicyConfig | EvmErc4337WalletNativeCoinsConfig>} [config] - If the protocol has been initialized with

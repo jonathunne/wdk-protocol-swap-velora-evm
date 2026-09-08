@@ -110,9 +110,9 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           hash: 'dummy-swap-hash',
@@ -138,9 +138,9 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           hash: 'dummy-swap-hash',
@@ -212,7 +212,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           fee: 12_345n,
@@ -237,7 +237,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           fee: 12_345n,
@@ -299,9 +299,9 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           hash: 'dummy-user-operation-hash',
@@ -327,9 +327,30 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+
+        expect(result).toEqual({
+          hash: 'dummy-user-operation-hash',
+          fee: 12_345n,
+          tokenInAmount: 100n,
+          tokenOutAmount: 100_000n
+        })
+      })
+
+      test('should forward a config override to quote and send', async () => {
+        const CONFIG = { isSponsored: true }
+
+        const result = await protocol.swap({
+          tokenIn: TOKEN_IN,
+          tokenOut: TOKEN_OUT,
+          tokenOutAmount: 100_000
+        }, CONFIG)
+
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, CONFIG)
+
+        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, CONFIG)
 
         expect(result).toEqual({
           hash: 'dummy-user-operation-hash',
@@ -406,7 +427,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           fee: 12_345n,
@@ -431,7 +452,25 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith([DUMMY_SWAP_TRANSACTION], undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+
+        expect(result).toEqual({
+          fee: 12_345n,
+          tokenInAmount: 100n,
+          tokenOutAmount: 100_000n
+        })
+      })
+
+      test('should forward a config override to quoteSwap', async () => {
+        const CONFIG = { isSponsored: true }
+
+        const result = await protocol.quoteSwap({
+          tokenIn: TOKEN_IN,
+          tokenOut: TOKEN_OUT,
+          tokenOutAmount: 100_000
+        }, CONFIG)
+
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, CONFIG)
 
         expect(result).toEqual({
           fee: 12_345n,

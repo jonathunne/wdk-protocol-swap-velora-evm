@@ -26,7 +26,7 @@
     "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage"
   },
   "dependencies": {
-    "@tetherto/wdk-wallet": "1.0.0-beta.11",
+    "@tetherto/wdk-wallet": "1.0.0-beta.14",
     "@tetherto/wdk-wallet-evm": "1.0.0-beta.14",
     "@tetherto/wdk-wallet-evm-erc-4337": "1.0.0-beta.9",
     "@velora-dex/sdk": "9.0.0",

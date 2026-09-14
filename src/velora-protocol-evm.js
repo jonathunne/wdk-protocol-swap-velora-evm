@@ -139,7 +139,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
   }
 
   /** @private */
-  async _getSwapTransactions ({ tokenIn, tokenOut, tokenInAmount, tokenOutAmount, to }) {
+  async _getSwapTransactions ({ tokenIn, tokenOut, tokenInAmount, tokenOutAmount, minAmountOut, to }) {
     const veloraSdk = await this._getVeloraSdk()
 
     const { side, amount } = tokenInAmount
@@ -153,6 +153,17 @@ export default class VeloraProtocolEvm extends SwapProtocol {
       side
     })
 
+    const exactAmount = side === 'SELL' ? priceRoute.srcAmount : priceRoute.destAmount
+    if (priceRoute.srcToken.toLowerCase() !== tokenIn.toLowerCase() ||
+        priceRoute.destToken.toLowerCase() !== tokenOut.toLowerCase() ||
+        BigInt(exactAmount) !== BigInt(amount)) {
+      throw new Error('Velora quote does not match the requested swap.')
+    }
+
+    if (minAmountOut !== undefined && BigInt(priceRoute.destAmount) < BigInt(minAmountOut)) {
+      throw new Error('Velora quote is below the minimum output amount.')
+    }
+
     const address = await this._account.getAddress()
 
     const swapTx = await veloraSdk.swap.buildTx({
@@ -160,7 +171,9 @@ export default class VeloraProtocolEvm extends SwapProtocol {
       srcToken: priceRoute.srcToken,
       destToken: priceRoute.destToken,
       srcAmount: priceRoute.srcAmount,
-      destAmount: priceRoute.destAmount,
+      destAmount: side === 'SELL' && minAmountOut !== undefined
+        ? minAmountOut.toString()
+        : priceRoute.destAmount,
       userAddress: address,
       receiver: to,
       priceRoute

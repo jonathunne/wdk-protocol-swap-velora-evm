@@ -70,6 +70,106 @@ describe('VeloraSwapProtocolEvm', () => {
   let account,
       protocol
 
+  describe.each(['swap', 'quoteSwap'])('%s quote validation', (method) => {
+    beforeEach(() => {
+      getRateMock.mockReset().mockResolvedValue(DUMMY_PRICE_ROUTE)
+      buildTxMock.mockReset().mockResolvedValue(DUMMY_SWAP_TRANSACTION)
+      account = new WalletAccountEvm(SEED, "0'/0/0", {
+        provider: 'https://mock-rpc-url.com'
+      })
+      account.getAddress = jest.fn().mockResolvedValue(USER_ADDRESS)
+      account.quoteSendTransaction = jest.fn().mockResolvedValue({ fee: 12_345n })
+      account.sendTransaction = jest.fn().mockResolvedValue({ hash: 'dummy-swap-hash' })
+      protocol = new VeloraProtocolEvm(account)
+    })
+
+    test.each([
+      ['sell input token', { tokenInAmount: 100n }, { srcToken: TOKEN_OUT }],
+      ['sell output token', { tokenInAmount: 100n }, { destToken: TOKEN_IN }],
+      ['buy input token', { tokenOutAmount: 100_000n }, { srcToken: TOKEN_OUT }],
+      ['buy output token', { tokenOutAmount: 100_000n }, { destToken: TOKEN_IN }],
+      ['sell exact amount', { tokenInAmount: 100n }, { srcAmount: '101' }],
+      ['buy exact amount', { tokenOutAmount: 100_000n }, { destAmount: '99999' }]
+    ])('rejects a quote with a mismatched %s before building or sending', async (_, amounts, route) => {
+      getRateMock.mockResolvedValue({ ...DUMMY_PRICE_ROUTE, ...route })
+
+      await expect(protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, ...amounts }))
+        .rejects.toThrow('Velora quote does not match the requested swap.')
+
+      expect(buildTxMock).not.toHaveBeenCalled()
+      expect(account.quoteSendTransaction).not.toHaveBeenCalled()
+      expect(account.sendTransaction).not.toHaveBeenCalled()
+    })
+
+    test.each([
+      ['sell', { tokenInAmount: 100n }],
+      ['buy', { tokenOutAmount: 100_000n }]
+    ])('rejects a %s quote below minAmountOut before building or sending', async (_, amounts) => {
+      await expect(protocol[method]({
+        tokenIn: TOKEN_IN,
+        tokenOut: TOKEN_OUT,
+        ...amounts,
+        minAmountOut: 100_001n
+      })).rejects.toThrow('Velora quote is below the minimum output amount.')
+
+      expect(buildTxMock).not.toHaveBeenCalled()
+      expect(account.quoteSendTransaction).not.toHaveBeenCalled()
+      expect(account.sendTransaction).not.toHaveBeenCalled()
+    })
+
+    test.each([0n, 90_000, 100_000n])('uses the explicit sell floor %s in buildTx', async (minAmountOut) => {
+      const result = await protocol[method]({
+        tokenIn: TOKEN_IN,
+        tokenOut: TOKEN_OUT,
+        tokenInAmount: 100n,
+        minAmountOut
+      })
+
+      expect(buildTxMock).toHaveBeenCalledWith({
+        ...DUMMY_BUILD_TX_INPUT,
+        destAmount: minAmountOut.toString()
+      }, { ignoreChecks: true })
+      expect(result.tokenOutAmount).toBe(100_000n)
+    })
+
+    test('keeps the exact buy output when minAmountOut is lower', async () => {
+      await protocol[method]({
+        tokenIn: TOKEN_IN,
+        tokenOut: TOKEN_OUT,
+        tokenOutAmount: 100_000n,
+        minAmountOut: 90_000n
+      })
+
+      expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
+    })
+
+    test('accepts case-insensitive token addresses and exact bigint amounts', async () => {
+      const amount = 9_007_199_254_740_993n
+      const priceRoute = {
+        ...DUMMY_PRICE_ROUTE,
+        srcToken: TOKEN_IN.toLowerCase(),
+        destToken: TOKEN_OUT.toLowerCase(),
+        srcAmount: amount.toString()
+      }
+      getRateMock.mockResolvedValue(priceRoute)
+
+      const result = await protocol[method]({
+        tokenIn: TOKEN_IN,
+        tokenOut: TOKEN_OUT,
+        tokenInAmount: amount
+      })
+
+      expect(buildTxMock).toHaveBeenCalledWith({
+        ...DUMMY_BUILD_TX_INPUT,
+        srcToken: priceRoute.srcToken,
+        destToken: priceRoute.destToken,
+        srcAmount: amount.toString(),
+        priceRoute
+      }, { ignoreChecks: true })
+      expect(result.tokenInAmount).toBe(amount)
+    })
+  })
+
   describe('with WalletAccountEvm', () => {
     beforeEach(() => {
       account = new WalletAccountEvm(SEED, "0'/0/0", {

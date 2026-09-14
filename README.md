@@ -134,6 +134,7 @@ Options:
 - `tokenOut` (string): address of token to buy
 - `tokenInAmount` (bigint, optional): exact input amount
 - `tokenOutAmount` (bigint, optional): exact output amount
+- `minAmountOut` (number or bigint, optional): minimum acceptable output amount in base units
 - `to` (string, optional): recipient (default: your address)
 
 Config (ERC‑4337 only):
@@ -145,6 +146,8 @@ Returns:
 - ERC‑4337 account: `{ hash, fee, tokenInAmount, tokenOutAmount }` (approve bundled)
 
 Notes:
+- Quotes must match the requested token pair and exact input (sell) or output (buy) amount. A mismatch, or a quote below `minAmountOut`, fails before building or sending a transaction.
+- On sells, `minAmountOut` is passed to Velora as the transaction's output floor; when omitted, the quoted output is used. Buys retain the exact requested output. Returned amounts describe the quote.
 - On Ethereum mainnet, selling USDT may first set allowance to 0, then approve.
 - Requires an attached provider.
 - Requires a non-read-only account to send swaps.

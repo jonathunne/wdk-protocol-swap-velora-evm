@@ -30,6 +30,12 @@ export default class VeloraProtocolEvm extends SwapProtocol {
      * @returns {Promise<SwapResult>} The swap's result.
      * @throws {Error} If the protocol was initialized with a read-only account.
      * @throws {Error} If the account is not connected to a provider.
+     * @throws {Error} If the Velora quote does not match the requested swap or carries a non-positive amount.
+     * @throws {Error} If the Velora quote is below the minAmountOut option.
+     * @throws {Error} If the Velora quote is not for the pinned Velora API version.
+     * @throws {Error} If the transaction built by Velora does not target the Augustus router.
+     * @throws {Error} If the transaction built by Velora carries a malformed calldata.
+     * @throws {Error} If the transaction built by Velora carries a value that does not match the quoted input amount.
      * @throws {Error} If the quoted fee is greater than or equal to the swapMaxFee option.
      */
     swap(options: SwapOptions, config?: Partial<EvmErc4337WalletPaymasterTokenConfig | EvmErc4337WalletSponsorshipPolicyConfig | EvmErc4337WalletNativeCoinsConfig> & Pick<SwapProtocolConfig, "swapMaxFee">): Promise<SwapResult>;
@@ -43,12 +49,20 @@ export default class VeloraProtocolEvm extends SwapProtocol {
      *   an erc-4337 wallet account, it can be used to override its configuration options. Standard (non erc-4337) accounts silently ignore this config.
      * @returns {Promise<Omit<SwapResult, 'hash'>>} The swap's quotes.
      * @throws {Error} If the account is not connected to a provider.
+     * @throws {Error} If the Velora quote does not match the requested swap or carries a non-positive amount.
+     * @throws {Error} If the Velora quote is below the minAmountOut option.
+     * @throws {Error} If the Velora quote is not for the pinned Velora API version.
+     * @throws {Error} If the transaction built by Velora does not target the Augustus router.
+     * @throws {Error} If the transaction built by Velora carries a malformed calldata.
+     * @throws {Error} If the transaction built by Velora carries a value that does not match the quoted input amount.
      */
     quoteSwap(options: SwapOptions, config?: Partial<EvmErc4337WalletPaymasterTokenConfig | EvmErc4337WalletSponsorshipPolicyConfig | EvmErc4337WalletNativeCoinsConfig>): Promise<Omit<SwapResult, "hash">>;
     /** @private */
     private _getVeloraSdk;
     /** @private */
     private _getSwapTransactions;
+    /** @private */
+    private _getVerifiedSwapTransaction;
 }
 export type SwapProtocolConfig = import("@tetherto/wdk-wallet/protocols").SwapProtocolConfig;
 export type SwapOptions = import("@tetherto/wdk-wallet/protocols").SwapOptions;

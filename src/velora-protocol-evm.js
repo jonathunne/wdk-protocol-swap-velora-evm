@@ -112,8 +112,9 @@ export default class VeloraProtocolEvm extends SwapProtocol {
    * @returns {Promise<SwapResult>} The swap's result.
    * @throws {Error} If the protocol was initialized with a read-only account.
    * @throws {Error} If the account is not connected to a provider.
-   * @throws {Error} If the Velora quote does not match the requested swap.
+   * @throws {Error} If the Velora quote does not match the requested swap or carries a non-positive amount.
    * @throws {Error} If the Velora quote is below the minAmountOut option.
+   * @throws {Error} If the Velora quote is not for the pinned Velora API version.
    * @throws {Error} If the transaction built by Velora does not target the Augustus router.
    * @throws {Error} If the transaction built by Velora carries a malformed calldata.
    * @throws {Error} If the transaction built by Velora carries a value that does not match the quoted input amount.
@@ -153,8 +154,9 @@ export default class VeloraProtocolEvm extends SwapProtocol {
    *   an erc-4337 wallet account, it can be used to override its configuration options. Standard (non erc-4337) accounts silently ignore this config.
    * @returns {Promise<Omit<SwapResult, 'hash'>>} The swap's quotes.
    * @throws {Error} If the account is not connected to a provider.
-   * @throws {Error} If the Velora quote does not match the requested swap.
+   * @throws {Error} If the Velora quote does not match the requested swap or carries a non-positive amount.
    * @throws {Error} If the Velora quote is below the minAmountOut option.
+   * @throws {Error} If the Velora quote is not for the pinned Velora API version.
    * @throws {Error} If the transaction built by Velora does not target the Augustus router.
    * @throws {Error} If the transaction built by Velora carries a malformed calldata.
    * @throws {Error} If the transaction built by Velora carries a value that does not match the quoted input amount.
@@ -206,7 +208,8 @@ export default class VeloraProtocolEvm extends SwapProtocol {
     const exactAmount = side === 'SELL' ? srcAmount : destAmount
     if (typeof priceRoute.srcToken !== 'string' || priceRoute.srcToken.toLowerCase() !== tokenIn.toLowerCase() ||
         typeof priceRoute.destToken !== 'string' || priceRoute.destToken.toLowerCase() !== tokenOut.toLowerCase() ||
-        srcAmount === undefined || destAmount === undefined || exactAmount !== BigInt(amount)) {
+        srcAmount === undefined || destAmount === undefined || srcAmount <= 0n || destAmount <= 0n ||
+        exactAmount !== BigInt(amount)) {
       throw new Error('Velora quote does not match the requested swap.')
     }
 
@@ -240,26 +243,18 @@ export default class VeloraProtocolEvm extends SwapProtocol {
     }
   }
 
-  /**
-   * Checks that a transaction built by the Velora API calls the Augustus router with the native value the quote
-   * accounts for, and keeps only the fields the wallet account needs to sign it.
-   *
-   * The Velora API is a remote service: without these checks a compromised endpoint could return an arbitrary
-   * transaction (e.g. a native coin transfer or a token approval) that the account would sign as a swap.
-   *
-   * @private
-   * @param {unknown} builtTx - The transaction returned by the Velora API.
-   * @param {{ srcToken: string, version?: unknown }} priceRoute - The validated price route the transaction was built from.
-   * @param {bigint} srcAmount - The validated input amount of the price route.
-   * @returns {{ to: string, data: string, value: bigint }} The transaction to sign.
-   * @throws {Error} If the transaction does not target the Augustus router.
-   * @throws {Error} If the transaction data is not a well-formed calldata.
-   * @throws {Error} If the transaction value does not match the quoted input amount.
-   */
+  /** @private */
   _getVerifiedSwapTransaction (builtTx, priceRoute, srcAmount) {
+    // The Velora API is a remote service: without these checks a compromised endpoint could return an arbitrary
+    // transaction (e.g. a native coin transfer or a token approval) that the account would sign as a swap. Only the
+    // router address, calldata and value are passed on, so any other field returned by the API is dropped.
     const { to, data, value } = /** @type {{ to?: unknown, data?: unknown, value?: unknown }} */ (builtTx ?? {})
 
-    if (typeof to !== 'string' || to.toLowerCase() !== AUGUSTUS_V6_2_ADDRESS || priceRoute.version !== VELORA_API_VERSION) {
+    if (priceRoute.version !== VELORA_API_VERSION) {
+      throw new Error(`Velora quote is not for API version ${VELORA_API_VERSION}.`)
+    }
+
+    if (typeof to !== 'string' || to.toLowerCase() !== AUGUSTUS_V6_2_ADDRESS) {
       throw new Error('Velora transaction does not target the Augustus router.')
     }
 

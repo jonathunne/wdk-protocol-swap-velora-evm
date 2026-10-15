@@ -20,7 +20,7 @@ const AUGUSTUS = '0x6A000F20005980200259B80c5102003040001068'
 const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
 const ATTACKER = '0xf90e98F3D8Dce44632E5020ABF2E122E0f99DFAb'
 
-const SWAP_DATA = '0xe3ead59e' + '0'.repeat(64)
+const DUMMY_SWAP_DATA = '0xe3ead59e' + '0'.repeat(64)
 
 const constructSimpleSDKMock = jest.fn()
 
@@ -73,7 +73,7 @@ describe('VeloraSwapProtocolEvm', () => {
     from: USER_ADDRESS,
     to: AUGUSTUS,
     value: '0',
-    data: SWAP_DATA,
+    data: DUMMY_SWAP_DATA,
     gasPrice: '1000000000',
     gas: 210000,
     chainId: 1
@@ -81,7 +81,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
   const EXPECTED_SWAP_TRANSACTION = {
     to: AUGUSTUS.toLowerCase(),
-    data: SWAP_DATA,
+    data: DUMMY_SWAP_DATA,
     value: 0n
   }
 
@@ -190,7 +190,7 @@ describe('VeloraSwapProtocolEvm', () => {
     test('pins the Velora SDK to API version 6.2', async () => {
       await protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n })
 
-      expect(constructSimpleSDKMock).toHaveBeenCalledWith({ fetch: expect.any(Function), chainId: 1, version: '6.2' })
+      expect(constructSimpleSDKMock).toHaveBeenCalledWith({ fetch: globalThis.fetch, chainId: 1, version: '6.2' })
     })
 
     test('passes only the router, calldata and value of the built transaction to the account', async () => {
@@ -232,12 +232,24 @@ describe('VeloraSwapProtocolEvm', () => {
     test.each([
       ['a malformed source amount', { srcAmount: 'abc' }],
       ['a malformed destination amount', { destAmount: '1.5' }],
+      ['a zero source amount', { srcAmount: '0' }],
+      ['a negative source amount', { srcAmount: '-5' }],
       ['a non-string source token', { srcToken: 12345 }],
       ['a non-string destination token', { destToken: undefined }]
     ])('rejects a quote with %s before building or sending', async (_, route) => {
       getRateMock.mockResolvedValue({ ...DUMMY_PRICE_ROUTE, ...route })
 
       await expect(protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenOutAmount: 100_000n }))
+        .rejects.toThrow('Velora quote does not match the requested swap.')
+
+      expect(buildTxMock).not.toHaveBeenCalled()
+      expect(account.quoteSendTransaction).not.toHaveBeenCalled()
+    })
+
+    test('rejects a sell quote with a zero destination amount before building or sending', async () => {
+      getRateMock.mockResolvedValue({ ...DUMMY_PRICE_ROUTE, destAmount: '0' })
+
+      await expect(protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n }))
         .rejects.toThrow('Velora quote does not match the requested swap.')
 
       expect(buildTxMock).not.toHaveBeenCalled()
@@ -264,7 +276,7 @@ describe('VeloraSwapProtocolEvm', () => {
       getRateMock.mockResolvedValue({ ...DUMMY_PRICE_ROUTE, version })
 
       await expect(protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n }))
-        .rejects.toThrow('Velora transaction does not target the Augustus router.')
+        .rejects.toThrow('Velora quote is not for API version 6.2.')
 
       expect(account.quoteSendTransaction).not.toHaveBeenCalled()
       expect(account.sendTransaction).not.toHaveBeenCalled()
@@ -315,6 +327,17 @@ describe('VeloraSwapProtocolEvm', () => {
         buildTxMock.mockResolvedValue({ ...DUMMY_SWAP_TRANSACTION, value })
 
         await protocol[method]({ tokenIn: NATIVE_TOKEN, tokenOut: TOKEN_OUT, tokenInAmount: 100n })
+
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith({
+          ...EXPECTED_SWAP_TRANSACTION,
+          value: 100n
+        }, undefined)
+      })
+
+      test('attaches the quoted input amount as value when buying an exact output amount', async () => {
+        buildTxMock.mockResolvedValue({ ...DUMMY_SWAP_TRANSACTION, value: '100' })
+
+        await protocol[method]({ tokenIn: NATIVE_TOKEN, tokenOut: TOKEN_OUT, tokenOutAmount: 100_000n })
 
         expect(account.quoteSendTransaction).toHaveBeenCalledWith({
           ...EXPECTED_SWAP_TRANSACTION,

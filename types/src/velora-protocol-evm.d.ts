@@ -30,8 +30,9 @@ export default class VeloraProtocolEvm extends SwapProtocol {
      * @returns {Promise<SwapResult>} The swap's result.
      * @throws {Error} If the protocol was initialized with a read-only account.
      * @throws {Error} If the account is not connected to a provider.
-     * @throws {Error} If the Velora quote does not match the requested swap.
+     * @throws {Error} If the Velora quote does not match the requested swap or carries a non-positive amount.
      * @throws {Error} If the Velora quote is below the minAmountOut option.
+     * @throws {Error} If the Velora quote is not for the pinned Velora API version.
      * @throws {Error} If the transaction built by Velora does not target the Augustus router.
      * @throws {Error} If the transaction built by Velora carries a malformed calldata.
      * @throws {Error} If the transaction built by Velora carries a value that does not match the quoted input amount.
@@ -48,8 +49,9 @@ export default class VeloraProtocolEvm extends SwapProtocol {
      *   an erc-4337 wallet account, it can be used to override its configuration options. Standard (non erc-4337) accounts silently ignore this config.
      * @returns {Promise<Omit<SwapResult, 'hash'>>} The swap's quotes.
      * @throws {Error} If the account is not connected to a provider.
-     * @throws {Error} If the Velora quote does not match the requested swap.
+     * @throws {Error} If the Velora quote does not match the requested swap or carries a non-positive amount.
      * @throws {Error} If the Velora quote is below the minAmountOut option.
+     * @throws {Error} If the Velora quote is not for the pinned Velora API version.
      * @throws {Error} If the transaction built by Velora does not target the Augustus router.
      * @throws {Error} If the transaction built by Velora carries a malformed calldata.
      * @throws {Error} If the transaction built by Velora carries a value that does not match the quoted input amount.
@@ -59,22 +61,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
     private _getVeloraSdk;
     /** @private */
     private _getSwapTransactions;
-    /**
-     * Checks that a transaction built by the Velora API calls the Augustus router with the native value the quote
-     * accounts for, and keeps only the fields the wallet account needs to sign it.
-     *
-     * The Velora API is a remote service: without these checks a compromised endpoint could return an arbitrary
-     * transaction (e.g. a native coin transfer or a token approval) that the account would sign as a swap.
-     *
-     * @private
-     * @param {unknown} builtTx - The transaction returned by the Velora API.
-     * @param {{ srcToken: string, version?: unknown }} priceRoute - The validated price route the transaction was built from.
-     * @param {bigint} srcAmount - The validated input amount of the price route.
-     * @returns {{ to: string, data: string, value: bigint }} The transaction to sign.
-     * @throws {Error} If the transaction does not target the Augustus router.
-     * @throws {Error} If the transaction data is not a well-formed calldata.
-     * @throws {Error} If the transaction value does not match the quoted input amount.
-     */
+    /** @private */
     private _getVerifiedSwapTransaction;
 }
 export type SwapProtocolConfig = import("@tetherto/wdk-wallet/protocols").SwapProtocolConfig;

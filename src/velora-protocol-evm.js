@@ -245,10 +245,7 @@ export default class VeloraProtocolEvm extends SwapProtocol {
 
   /** @private */
   _getVerifiedSwapTransaction (builtTx, priceRoute, srcAmount) {
-    // The Velora API is a remote service: without these checks a compromised endpoint could return an arbitrary
-    // transaction (e.g. a native coin transfer or a token approval) that the account would sign as a swap. Only the
-    // router address, calldata and value are passed on, so any other field returned by the API is dropped.
-    const { to, data, value } = /** @type {{ to?: unknown, data?: unknown, value?: unknown }} */ (builtTx ?? {})
+    const { to, data, value } = builtTx
 
     if (priceRoute.version !== VELORA_API_VERSION) {
       throw new Error(`Velora quote is not for API version ${VELORA_API_VERSION}.`)

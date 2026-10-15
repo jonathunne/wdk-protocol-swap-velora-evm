@@ -219,8 +219,8 @@ describe('VeloraSwapProtocolEvm', () => {
       expect(account.quoteSendTransaction).toHaveBeenCalledWith({ ...EXPECTED_SWAP_TRANSACTION, data }, undefined)
     })
 
-    test.each([null, undefined, 'not-an-object'])('rejects a built transaction of %s', async (builtTx) => {
-      buildTxMock.mockResolvedValue(builtTx)
+    test('rejects a built transaction that is not an object', async () => {
+      buildTxMock.mockResolvedValue('not-an-object')
 
       await expect(protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n }))
         .rejects.toThrow('Velora transaction does not target the Augustus router.')

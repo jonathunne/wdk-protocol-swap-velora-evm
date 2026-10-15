@@ -20,6 +20,29 @@ import { JsonRpcProvider, BrowserProvider } from 'ethers'
 
 import { constructSimpleSDK } from '@velora-dex/sdk'
 
+/**
+ * The version of the Velora API the protocol uses.
+ *
+ * It is pinned explicitly because the Augustus router address below is only valid for this version.
+ */
+const VELORA_API_VERSION = '6.2'
+
+/**
+ * The address of the Velora Augustus v6.2 router.
+ *
+ * Velora deploys the router at this address on every supported chain, so it is the only contract a transaction
+ * built by the Velora API (pinned to v6.2 above) is allowed to call.
+ *
+ * @see https://developers.velora.xyz/augustus-swapper/augustus-v6.2-smart-contracts
+ */
+const AUGUSTUS_V6_2_ADDRESS = '0x6a000f20005980200259b80c5102003040001068'
+
+/** The placeholder address used by Velora to represent the native coin of a chain. */
+const NATIVE_TOKEN_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
+
+/** The pattern of a well-formed calldata: a 4-byte selector followed by whole bytes. */
+const CALLDATA_PATTERN = /^0x[0-9a-fA-F]{8}(?:[0-9a-fA-F]{2})*$/
+
 /** @typedef {import('@tetherto/wdk-wallet/protocols').SwapProtocolConfig} SwapProtocolConfig */
 /** @typedef {import('@tetherto/wdk-wallet/protocols').SwapOptions} SwapOptions */
 /** @typedef {import('@tetherto/wdk-wallet/protocols').SwapResult} SwapResult */
@@ -30,6 +53,20 @@ import { constructSimpleSDK } from '@velora-dex/sdk'
 /** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletPaymasterTokenConfig} EvmErc4337WalletPaymasterTokenConfig */
 /** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletSponsorshipPolicyConfig} EvmErc4337WalletSponsorshipPolicyConfig */
 /** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletNativeCoinsConfig} EvmErc4337WalletNativeCoinsConfig */
+
+/**
+ * Converts an untrusted value to a bigint.
+ *
+ * @param {unknown} value - The value to convert.
+ * @returns {bigint | undefined} The converted value, or undefined if it cannot be represented as a bigint.
+ */
+function toBigIntOrUndefined (value) {
+  try {
+    return BigInt(/** @type {any} */ (value))
+  } catch {
+    return undefined
+  }
+}
 
 export default class VeloraProtocolEvm extends SwapProtocol {
   /**
@@ -75,6 +112,11 @@ export default class VeloraProtocolEvm extends SwapProtocol {
    * @returns {Promise<SwapResult>} The swap's result.
    * @throws {Error} If the protocol was initialized with a read-only account.
    * @throws {Error} If the account is not connected to a provider.
+   * @throws {Error} If the Velora quote does not match the requested swap.
+   * @throws {Error} If the Velora quote is below the minAmountOut option.
+   * @throws {Error} If the transaction built by Velora does not target the Augustus router.
+   * @throws {Error} If the transaction built by Velora carries a malformed calldata.
+   * @throws {Error} If the transaction built by Velora carries a value that does not match the quoted input amount.
    * @throws {Error} If the quoted fee is greater than or equal to the swapMaxFee option.
    */
   async swap (options, config) {
@@ -111,6 +153,11 @@ export default class VeloraProtocolEvm extends SwapProtocol {
    *   an erc-4337 wallet account, it can be used to override its configuration options. Standard (non erc-4337) accounts silently ignore this config.
    * @returns {Promise<Omit<SwapResult, 'hash'>>} The swap's quotes.
    * @throws {Error} If the account is not connected to a provider.
+   * @throws {Error} If the Velora quote does not match the requested swap.
+   * @throws {Error} If the Velora quote is below the minAmountOut option.
+   * @throws {Error} If the transaction built by Velora does not target the Augustus router.
+   * @throws {Error} If the transaction built by Velora carries a malformed calldata.
+   * @throws {Error} If the transaction built by Velora carries a value that does not match the quoted input amount.
    */
   async quoteSwap (options, config) {
     if (!this._provider) {
@@ -131,7 +178,8 @@ export default class VeloraProtocolEvm extends SwapProtocol {
 
       this._veloraSdk = constructSimpleSDK({
         fetch,
-        chainId: Number(network.chainId)
+        chainId: Number(network.chainId),
+        version: VELORA_API_VERSION
       })
     }
 
@@ -153,20 +201,22 @@ export default class VeloraProtocolEvm extends SwapProtocol {
       side
     })
 
-    const exactAmount = side === 'SELL' ? priceRoute.srcAmount : priceRoute.destAmount
-    if (priceRoute.srcToken.toLowerCase() !== tokenIn.toLowerCase() ||
-        priceRoute.destToken.toLowerCase() !== tokenOut.toLowerCase() ||
-        BigInt(exactAmount) !== BigInt(amount)) {
+    const srcAmount = toBigIntOrUndefined(priceRoute.srcAmount)
+    const destAmount = toBigIntOrUndefined(priceRoute.destAmount)
+    const exactAmount = side === 'SELL' ? srcAmount : destAmount
+    if (typeof priceRoute.srcToken !== 'string' || priceRoute.srcToken.toLowerCase() !== tokenIn.toLowerCase() ||
+        typeof priceRoute.destToken !== 'string' || priceRoute.destToken.toLowerCase() !== tokenOut.toLowerCase() ||
+        srcAmount === undefined || destAmount === undefined || exactAmount !== BigInt(amount)) {
       throw new Error('Velora quote does not match the requested swap.')
     }
 
-    if (minAmountOut !== undefined && BigInt(priceRoute.destAmount) < BigInt(minAmountOut)) {
+    if (minAmountOut !== undefined && destAmount < BigInt(minAmountOut)) {
       throw new Error('Velora quote is below the minimum output amount.')
     }
 
     const address = await this._account.getAddress()
 
-    const swapTx = await veloraSdk.swap.buildTx({
+    const builtTx = await veloraSdk.swap.buildTx({
       partner: 'wdk',
       srcToken: priceRoute.srcToken,
       destToken: priceRoute.destToken,
@@ -181,10 +231,48 @@ export default class VeloraProtocolEvm extends SwapProtocol {
       ignoreChecks: true
     })
 
+    const swapTx = this._getVerifiedSwapTransaction(builtTx, priceRoute, srcAmount)
+
     return {
       swapTx,
-      tokenInAmount: BigInt(priceRoute.srcAmount),
-      tokenOutAmount: BigInt(priceRoute.destAmount)
+      tokenInAmount: srcAmount,
+      tokenOutAmount: destAmount
     }
+  }
+
+  /**
+   * Checks that a transaction built by the Velora API calls the Augustus router with the native value the quote
+   * accounts for, and keeps only the fields the wallet account needs to sign it.
+   *
+   * The Velora API is a remote service: without these checks a compromised endpoint could return an arbitrary
+   * transaction (e.g. a native coin transfer or a token approval) that the account would sign as a swap.
+   *
+   * @private
+   * @param {unknown} builtTx - The transaction returned by the Velora API.
+   * @param {{ srcToken: string, version?: unknown }} priceRoute - The validated price route the transaction was built from.
+   * @param {bigint} srcAmount - The validated input amount of the price route.
+   * @returns {{ to: string, data: string, value: bigint }} The transaction to sign.
+   * @throws {Error} If the transaction does not target the Augustus router.
+   * @throws {Error} If the transaction data is not a well-formed calldata.
+   * @throws {Error} If the transaction value does not match the quoted input amount.
+   */
+  _getVerifiedSwapTransaction (builtTx, priceRoute, srcAmount) {
+    const { to, data, value } = /** @type {{ to?: unknown, data?: unknown, value?: unknown }} */ (builtTx ?? {})
+
+    if (typeof to !== 'string' || to.toLowerCase() !== AUGUSTUS_V6_2_ADDRESS || priceRoute.version !== VELORA_API_VERSION) {
+      throw new Error('Velora transaction does not target the Augustus router.')
+    }
+
+    if (typeof data !== 'string' || !CALLDATA_PATTERN.test(data)) {
+      throw new Error('Velora transaction data is malformed.')
+    }
+
+    const expectedValue = priceRoute.srcToken.toLowerCase() === NATIVE_TOKEN_ADDRESS ? srcAmount : 0n
+
+    if (toBigIntOrUndefined(value ?? 0) !== expectedValue) {
+      throw new Error('Velora transaction value does not match the requested swap.')
+    }
+
+    return { to: AUGUSTUS_V6_2_ADDRESS, data, value: expectedValue }
   }
 }

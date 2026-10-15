@@ -19,6 +19,7 @@ For documentation on the complete WDK ecosystem, see https://docs.wdk.tether.io/
 - Token Swapping via Valora Dex
 - Account Abstraction: Works with standard EVM wallets and ERC‑4337 smart accounts
 - Fee Controls: Optional `swapMaxFee` to cap gas costs
+- Transaction Verification: Transactions built by the Velora API are only signed if they call the Augustus v6.2 router with the quoted native value; the swap parameters inside the calldata are not yet verified
 - USDT Mainnet Handling: Allowance reset to 0 before approve when needed
 - TypeScript Definitions
 - Provider Flexibility: Works with JSON‑RPC URLs and EIP‑1193 providers
@@ -149,6 +150,7 @@ Returns:
 
 Notes:
 - Quotes must match the requested token pair and exact input (sell) or output (buy) amount. A mismatch, or a quote below `minAmountOut`, fails before building or sending a transaction.
+- The transaction built by Velora must call the Augustus v6.2 router, carry a well-formed calldata, and attach a native value equal to the quoted input amount when selling the native coin (zero otherwise). Only the router address, calldata and value are passed to the account; any other field returned by the API is dropped. The calldata itself is not decoded, so a compromised API could still alter the swap's parameters within a genuine router call.
 - On sells, `minAmountOut` is passed to Velora as the transaction's output floor; when omitted, the quoted output is used. Buys retain the exact requested output. Returned amounts describe the quote.
 - On Ethereum mainnet, selling USDT may first set allowance to 0, then approve.
 - Requires an attached provider.

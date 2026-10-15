@@ -16,7 +16,13 @@ const USER_ADDRESS = '0xa460AEbce0d3A4BecAd8ccf9D6D4861296c503Bd'
 
 const TOKEN_IN = '0x9e6b38E072f624fdC4Fbaf7bB12a7D9e657435ce'
 const TOKEN_OUT = '0x73091d62F1F11DCb172530126E9630e327770e05'
-const VELORA = '0xf90e98F3D8Dce44632E5020ABF2E122E0f99DFAb'
+const AUGUSTUS = '0x6A000F20005980200259B80c5102003040001068'
+const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
+const ATTACKER = '0xf90e98F3D8Dce44632E5020ABF2E122E0f99DFAb'
+
+const SWAP_DATA = '0xe3ead59e' + '0'.repeat(64)
+
+const constructSimpleSDKMock = jest.fn()
 
 const getRateMock = jest.fn()
 
@@ -31,7 +37,7 @@ jest.unstable_mockModule('ethers', () => ({
 
 jest.unstable_mockModule('@velora-dex/sdk', () => ({
   ...veloraDexSdk,
-  constructSimpleSDK: jest.fn().mockReturnValue({
+  constructSimpleSDK: constructSimpleSDKMock.mockReturnValue({
     chainId: 1,
     swap: {
       getRate: getRateMock,
@@ -47,7 +53,9 @@ describe('VeloraSwapProtocolEvm', () => {
     srcToken: TOKEN_IN,
     destToken: TOKEN_OUT,
     srcAmount: '100',
-    destAmount: '100000'
+    destAmount: '100000',
+    contractAddress: AUGUSTUS,
+    version: '6.2'
   }
 
   const DUMMY_BUILD_TX_INPUT = {
@@ -62,9 +70,19 @@ describe('VeloraSwapProtocolEvm', () => {
   }
 
   const DUMMY_SWAP_TRANSACTION = {
-    to: VELORA,
-    value: 0,
-    data: 'dummy-swap-method-data'
+    from: USER_ADDRESS,
+    to: AUGUSTUS,
+    value: '0',
+    data: SWAP_DATA,
+    gasPrice: '1000000000',
+    gas: 210000,
+    chainId: 1
+  }
+
+  const EXPECTED_SWAP_TRANSACTION = {
+    to: AUGUSTUS.toLowerCase(),
+    data: SWAP_DATA,
+    value: 0n
   }
 
   let account,
@@ -168,6 +186,152 @@ describe('VeloraSwapProtocolEvm', () => {
       }, { ignoreChecks: true })
       expect(result.tokenInAmount).toBe(amount)
     })
+
+    test('pins the Velora SDK to API version 6.2', async () => {
+      await protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n })
+
+      expect(constructSimpleSDKMock).toHaveBeenCalledWith({ fetch: expect.any(Function), chainId: 1, version: '6.2' })
+    })
+
+    test('passes only the router, calldata and value of the built transaction to the account', async () => {
+      await protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n })
+
+      expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
+    })
+
+    test.each([AUGUSTUS, AUGUSTUS.toLowerCase(), AUGUSTUS.toUpperCase().replace('0X', '0x')])('normalizes the router address %s', async (to) => {
+      buildTxMock.mockResolvedValue({ ...DUMMY_SWAP_TRANSACTION, to })
+
+      await protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n })
+
+      expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
+    })
+
+    test.each([
+      ['two words', '0xe3ead59e' + '0'.repeat(128)],
+      ['uppercase hex', '0xE3EAD59E' + 'A'.repeat(64)],
+      ['a non word-aligned length', '0xe3ead59e' + 'ab']
+    ])('accepts a calldata with %s', async (_, data) => {
+      buildTxMock.mockResolvedValue({ ...DUMMY_SWAP_TRANSACTION, data })
+
+      await protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n })
+
+      expect(account.quoteSendTransaction).toHaveBeenCalledWith({ ...EXPECTED_SWAP_TRANSACTION, data }, undefined)
+    })
+
+    test.each([null, undefined, 'not-an-object'])('rejects a built transaction of %s', async (builtTx) => {
+      buildTxMock.mockResolvedValue(builtTx)
+
+      await expect(protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n }))
+        .rejects.toThrow('Velora transaction does not target the Augustus router.')
+
+      expect(account.quoteSendTransaction).not.toHaveBeenCalled()
+      expect(account.sendTransaction).not.toHaveBeenCalled()
+    })
+
+    test.each([
+      ['a malformed source amount', { srcAmount: 'abc' }],
+      ['a malformed destination amount', { destAmount: '1.5' }],
+      ['a non-string source token', { srcToken: 12345 }],
+      ['a non-string destination token', { destToken: undefined }]
+    ])('rejects a quote with %s before building or sending', async (_, route) => {
+      getRateMock.mockResolvedValue({ ...DUMMY_PRICE_ROUTE, ...route })
+
+      await expect(protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenOutAmount: 100_000n }))
+        .rejects.toThrow('Velora quote does not match the requested swap.')
+
+      expect(buildTxMock).not.toHaveBeenCalled()
+      expect(account.quoteSendTransaction).not.toHaveBeenCalled()
+    })
+
+    test.each([
+      ['another contract', ATTACKER],
+      ['the user address', USER_ADDRESS],
+      ['an empty address', ''],
+      ['a missing address', undefined],
+      ['a non-string address', 12345]
+    ])('rejects a built transaction that targets %s', async (_, to) => {
+      buildTxMock.mockResolvedValue({ ...DUMMY_SWAP_TRANSACTION, to })
+
+      await expect(protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n }))
+        .rejects.toThrow('Velora transaction does not target the Augustus router.')
+
+      expect(account.quoteSendTransaction).not.toHaveBeenCalled()
+      expect(account.sendTransaction).not.toHaveBeenCalled()
+    })
+
+    test.each(['5', undefined, 6.2, '6.2.0'])('rejects a price route whose API version is %s', async (version) => {
+      getRateMock.mockResolvedValue({ ...DUMMY_PRICE_ROUTE, version })
+
+      await expect(protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n }))
+        .rejects.toThrow('Velora transaction does not target the Augustus router.')
+
+      expect(account.quoteSendTransaction).not.toHaveBeenCalled()
+      expect(account.sendTransaction).not.toHaveBeenCalled()
+    })
+
+    test.each([
+      ['a non-hex string', 'dummy-swap-method-data'],
+      ['an empty calldata', '0x'],
+      ['a truncated selector', '0xe3ea'],
+      ['an odd number of hex digits', '0xe3ead59e' + '0'.repeat(63)],
+      ['a 0X prefix', '0Xe3ead59e' + '0'.repeat(64)],
+      ['a missing calldata', undefined],
+      ['a non-string calldata', 12345]
+    ])('rejects a built transaction with %s', async (_, data) => {
+      buildTxMock.mockResolvedValue({ ...DUMMY_SWAP_TRANSACTION, data })
+
+      await expect(protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n }))
+        .rejects.toThrow('Velora transaction data is malformed.')
+
+      expect(account.quoteSendTransaction).not.toHaveBeenCalled()
+      expect(account.sendTransaction).not.toHaveBeenCalled()
+    })
+
+    test.each(['1', '1000000000000000000', 1, 1n, '0x1', 'abc'])('rejects a value of %s on a token swap', async (value) => {
+      buildTxMock.mockResolvedValue({ ...DUMMY_SWAP_TRANSACTION, value })
+
+      await expect(protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n }))
+        .rejects.toThrow('Velora transaction value does not match the requested swap.')
+
+      expect(account.quoteSendTransaction).not.toHaveBeenCalled()
+      expect(account.sendTransaction).not.toHaveBeenCalled()
+    })
+
+    test.each(['0', 0, 0n, '0x0', undefined, null])('accepts a value of %s on a token swap', async (value) => {
+      buildTxMock.mockResolvedValue({ ...DUMMY_SWAP_TRANSACTION, value })
+
+      await protocol[method]({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, tokenInAmount: 100n })
+
+      expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
+    })
+
+    describe('with the native coin as input token', () => {
+      beforeEach(() => {
+        getRateMock.mockResolvedValue({ ...DUMMY_PRICE_ROUTE, srcToken: NATIVE_TOKEN })
+      })
+
+      test.each(['100', 100, 100n, '0x64'])('accepts a value of %s equal to the quoted input amount', async (value) => {
+        buildTxMock.mockResolvedValue({ ...DUMMY_SWAP_TRANSACTION, value })
+
+        await protocol[method]({ tokenIn: NATIVE_TOKEN, tokenOut: TOKEN_OUT, tokenInAmount: 100n })
+
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith({
+          ...EXPECTED_SWAP_TRANSACTION,
+          value: 100n
+        }, undefined)
+      })
+
+      test.each(['0', '99', '101', '1000000000000000000', undefined])('rejects a value of %s that differs from the quoted input amount', async (value) => {
+        buildTxMock.mockResolvedValue({ ...DUMMY_SWAP_TRANSACTION, value })
+
+        await expect(protocol[method]({ tokenIn: NATIVE_TOKEN, tokenOut: TOKEN_OUT, tokenInAmount: 100n }))
+          .rejects.toThrow('Velora transaction value does not match the requested swap.')
+
+        expect(account.quoteSendTransaction).not.toHaveBeenCalled()
+        expect(account.sendTransaction).not.toHaveBeenCalled()
+      })
+    })
   })
 
   describe('with WalletAccountEvm', () => {
@@ -210,9 +374,9 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.sendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           hash: 'dummy-swap-hash',
@@ -238,9 +402,9 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.sendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           hash: 'dummy-swap-hash',
@@ -312,7 +476,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           fee: 12_345n,
@@ -337,7 +501,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           fee: 12_345n,
@@ -399,9 +563,9 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.sendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           hash: 'dummy-user-operation-hash',
@@ -427,9 +591,9 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.sendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           hash: 'dummy-user-operation-hash',
@@ -448,9 +612,9 @@ describe('VeloraSwapProtocolEvm', () => {
           tokenOutAmount: 100_000
         }, CONFIG)
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, CONFIG)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, CONFIG)
 
-        expect(account.sendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, CONFIG)
+        expect(account.sendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, CONFIG)
 
         expect(result).toEqual({
           hash: 'dummy-user-operation-hash',
@@ -527,7 +691,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           fee: 12_345n,
@@ -552,7 +716,7 @@ describe('VeloraSwapProtocolEvm', () => {
 
         expect(buildTxMock).toHaveBeenCalledWith(DUMMY_BUILD_TX_INPUT, { ignoreChecks: true })
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, undefined)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, undefined)
 
         expect(result).toEqual({
           fee: 12_345n,
@@ -570,7 +734,7 @@ describe('VeloraSwapProtocolEvm', () => {
           tokenOutAmount: 100_000
         }, CONFIG)
 
-        expect(account.quoteSendTransaction).toHaveBeenCalledWith(DUMMY_SWAP_TRANSACTION, CONFIG)
+        expect(account.quoteSendTransaction).toHaveBeenCalledWith(EXPECTED_SWAP_TRANSACTION, CONFIG)
 
         expect(result).toEqual({
           fee: 12_345n,

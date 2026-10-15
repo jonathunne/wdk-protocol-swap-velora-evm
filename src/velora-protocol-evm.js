@@ -57,12 +57,12 @@ const CALLDATA_PATTERN = /^0x[0-9a-fA-F]{8}(?:[0-9a-fA-F]{2})*$/
 /**
  * Converts an untrusted value to a bigint.
  *
- * @param {unknown} value - The value to convert.
+ * @param {string | number | bigint} value - The value to convert.
  * @returns {bigint | undefined} The converted value, or undefined if it cannot be represented as a bigint.
  */
 function toBigIntOrUndefined (value) {
   try {
-    return BigInt(/** @type {any} */ (value))
+    return BigInt(value)
   } catch {
     return undefined
   }
